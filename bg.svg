@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="fade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+      <stop offset=".55" stop-color="#fff" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="1"/>
+    </linearGradient>
+    <mask id="m"><rect width="1600" height="1000" fill="url(#fade)"/></mask>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c9a24a"/><stop offset="1" stop-color="#8a5a2b"/>
+    </linearGradient>
+    <g id="pawn">
+      <circle cx="0" cy="-118" r="30"/>
+      <path d="M-22 -90 h44 l-6 14 h-32 z"/>
+      <path d="M-18 -74 h36 c4 40 26 62 40 82 h-116 c14 -20 36 -42 40 -82 z"/>
+      <rect x="-64" y="8" width="128" height="16" rx="8"/>
+    </g>
+  </defs>
+  <g mask="url(#m)" opacity=".16">
+    <g transform="translate(720 470) rotate(-14) skewX(-18)" fill="url(#gold)">
+      <g id="row"><rect x="0" y="0" width="90" height="90"/><rect x="180" y="0" width="90" height="90"/><rect x="360" y="0" width="90" height="90"/><rect x="540" y="0" width="90" height="90"/><rect x="720" y="0" width="90" height="90"/></g>
+      <use href="#row" x="90" y="90"/>
+      <use href="#row" x="0" y="180"/>
+      <use href="#row" x="90" y="270"/>
+      <use href="#row" x="0" y="360"/>
+      <use href="#row" x="90" y="450"/>
+    </g>
+  </g>
+  <g fill="url(#gold)">
+    <use href="#pawn" transform="translate(1290 640) scale(2.3)" opacity=".11"/>
+    <use href="#pawn" transform="translate(1000 760) scale(1.2)" opacity=".09"/>
+    <use href="#pawn" transform="translate(1480 800) scale(.9)" opacity=".08"/>
+  </g>
+  <g fill="none" stroke="url(#gold)" stroke-width="2" opacity=".13">
+    <circle cx="1290" cy="470" r="200"/><circle cx="1290" cy="470" r="290"/><circle cx="1290" cy="470" r="380"/>
+    <path d="M0 780 L820 0 M0 900 L940 0 M120 1000 L1060 60"/>
+  </g>
+</svg>
