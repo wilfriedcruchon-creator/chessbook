@@ -58,7 +58,7 @@ function byCat(){
 }
 function nav(cur){
   const cats = byCat();
-  let h = `<h1>Tsubasa</h1>
+  let h = `<h1>ChessBook</h1>
   <input id="q" type="search" placeholder="Rechercher…" aria-label="Rechercher">
   <a href="#/" class="${cur===""?"on":""}"><span class="n">⌂</span>Accueil</a>`;
   for(const c in cats){
@@ -115,7 +115,7 @@ function fichePage(f, i){
 
 function homePage(){
   const cats = byCat();
-  let h = `<div class="home"><h2>Tsubasa</h2>`;
+  let h = `<div class="home"><h2>ChessBook</h2>`;
   for(const c in cats){
     h += `<h2 class="hc">${esc(c)}</h2>`;
     const groups = cats[c];
@@ -134,8 +134,8 @@ function route(){
   const i = F.findIndex(f=>f.id===id);
   $("#nav").innerHTML = nav(i>=0?id:"");
   const main = $("#main");
-  if(i<0){ main.innerHTML = homePage(); document.title="Tsubasa"; window.scrollTo(0,0); }
-  else { main.innerHTML = fichePage(F[i],i); document.title = F[i].titre+" — Tsubasa";
+  if(i<0){ main.innerHTML = homePage(); document.title="ChessBook"; window.scrollTo(0,0); }
+  else { main.innerHTML = fichePage(F[i],i); document.title = F[i].titre+" — ChessBook";
     if(parts[1]){ const el=document.getElementById(parts[1]); if(el) el.scrollIntoView(); } else window.scrollTo(0,0); }
   $("#nav").classList.remove("open");
   const q=$("#q");
