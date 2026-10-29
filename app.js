@@ -60,7 +60,8 @@ function nav(cur){
   const cats = byCat();
   let h = `<h1>ChessBook</h1>
   <input id="q" type="search" placeholder="Rechercher…" aria-label="Rechercher">
-  <a href="#/" class="${cur===""?"on":""}"><span class="n">⌂</span>Accueil</a>`;
+  <a href="#/" class="${cur===""?"on":""}"><span class="n">⌂</span>Accueil</a>
+  <a href="#/trouver" class="${cur==="trouver"?"on":""}"><span class="n">♞</span>Trouver le chapitre de ma partie</a>`;
   for(const c in cats){
     h += `<div class="cat">${esc(c)}</div>`;
     const groups = cats[c];
@@ -115,7 +116,8 @@ function fichePage(f, i){
 
 function homePage(){
   const cats = byCat();
-  let h = `<div class="home"><h2>ChessBook</h2>`;
+  let h = `<div class="home"><h2>ChessBook</h2>
+    <a class="cta" href="#/trouver"><b>♞ Trouver le chapitre de ma partie</b><span>Collez ou importez un fichier PGN : le site vous ouvre le chapitre le plus utile.</span></a>`;
   for(const c in cats){
     h += `<h2 class="hc">${esc(c)}</h2>`;
     const groups = cats[c];
@@ -128,14 +130,69 @@ function homePage(){
   return h + `</div>`;
 }
 
+/* ---- recherche par PGN : le module pgnfinder.js n'est chargé qu'à la demande ---- */
+const BK = "cb_found";
+let findIdx = null;
+function loadFinder(){
+  return window.PGNF ? Promise.resolve() : new Promise((ok,ko)=>{
+    const s=document.createElement("script"); s.src="pgnfinder.js"; s.onload=ok; s.onerror=()=>ko(new Error("pgnfinder.js")); document.head.appendChild(s); });
+}
+function finderPage(){
+  return `<div class="finder"><header class="fh"><div class="kick">Outil</div><h2>Trouver le chapitre de ma partie</h2></header>
+  <div class="essentiel"><p>Collez le PGN de votre partie (chess.com, Lichess, ChessBase…) ou importez le fichier. Le site rejoue la partie, la compare aux positions de tous les chapitres et ouvre directement le plus proche : ouverture suivie ou finale atteinte. Tout se passe dans votre navigateur, rien n'est envoyé.</p></div>
+  <textarea id="pgn" rows="10" placeholder="[Event &quot;…&quot;]&#10;&#10;1. e4 e5 2. Nf3 Nc6 3. Bb5 …" spellcheck="false" aria-label="PGN de la partie"></textarea>
+  <div class="frow"><label class="btn">Importer un fichier .pgn<input id="pgnfile" type="file" accept=".pgn,.txt,text/plain" hidden></label><button id="go" class="btn pri">Trouver le chapitre</button></div>
+  <div id="fres" aria-live="polite"></div></div>`;
+}
+function finderInit(){
+  const ta=$("#pgn"), res=$("#fres"); let games=[];
+  const msg=(h,cls)=>{ res.innerHTML=`<div class="fmsg ${cls||""}">${h}</div>`; };
+  function analyseGame(gi){
+    const P=window.PGNF, rep=P.replay(games[gi]);
+    if(rep.plies.length<2) return msg(rep.error ? `Coup illisible au demi-coup ${rep.error.ply} (« ${esc(rep.error.token)} »). Vérifiez le PGN.` : "Cette partie ne contient pas assez de coups.","w");
+    findIdx = findIdx || P.buildIndex(F);
+    const a=P.analyse(F,rep,findIdx), pb=P.pickBest(a);
+    if(!pb) return msg("Aucun chapitre ne recoupe vraiment cette partie (ni ouverture connue, ni finale reconnaissable). Utilisez la recherche du menu pour parcourir les chapitres.","w");
+    const seen=new Set([pb.best.id]), alts=[];
+    [...a.theory.filter(x=>x.score>=0.4), ...a.ending.slice(0,3)].forEach(x=>{ if(!seen.has(x.id) && alts.length<5){ seen.add(x.id); alts.push({id:x.id,k:x.k,titre:x.titre}); } });
+    let why=pb.best.why;
+    if(rep.error) why += ` (Partie lue jusqu'au demi-coup ${rep.error.ply-1} : le coup « ${rep.error.token} » n'a pas pu être interprété.)`;
+    try{ sessionStorage.setItem(BK, JSON.stringify({id:pb.best.id,why,alts})); }catch(e){}
+    location.hash=`#/${pb.best.id}/s${pb.best.k}`;
+  }
+  function run(){
+    const txt=ta.value.trim(); if(!txt) return msg("Collez d'abord un PGN ou importez un fichier.","w");
+    loadFinder().then(()=>{
+      games=window.PGNF.parsePGN(txt);
+      if(!games.length) return msg("Aucun coup trouvé dans ce texte.","w");
+      if(games.length===1) return analyseGame(0);
+      res.innerHTML=`<div class="fmsg"><b>${games.length} parties trouvées</b> — choisissez celle à analyser :</div><div class="glist">`+
+        games.map((g,k)=>{ const h=g.headers; return `<button data-g="${k}">${esc((h.White||"?")+" – "+(h.Black||"?"))}<small>${esc([h.Result,h.Date,h.Event].filter(x=>x&&x!=="?").join(" · "))}</small></button>`; }).join("")+`</div>`;
+      res.querySelectorAll("button[data-g]").forEach(b=>b.onclick=()=>analyseGame(+b.dataset.g));
+    }).catch(()=>msg("Le module de recherche n'a pas pu être chargé.","w"));
+  }
+  $("#go").onclick=run;
+  $("#pgnfile").onchange=e=>{ const f=e.target.files[0]; if(f) f.text().then(t=>{ ta.value=t; run(); }); };
+}
+function foundBanner(id){
+  let d=null; try{ d=JSON.parse(sessionStorage.getItem(BK)||"null"); }catch(e){}
+  if(!d) return "";
+  if(d.id!==id){ try{ sessionStorage.removeItem(BK); }catch(e){} return ""; }
+  return `<div class="fbanner"><button class="x" aria-label="Fermer">✕</button><b>Chapitre trouvé à partir de votre partie</b><p>${esc(d.why)}</p>`+
+    (d.alts.length?`<p class="alts">Autres pistes : ${d.alts.map(x=>`<a href="#/${x.id}/s${x.k}">${esc(x.titre)}</a>`).join(" · ")}</p>`:"")+
+    `<p><a href="#/trouver">Analyser une autre partie</a></p></div>`;
+}
+
 function route(){
   const parts = (location.hash||"#/").replace(/^#\/?/,"").split("/");
   const id = parts[0]||"";
   const i = F.findIndex(f=>f.id===id);
-  $("#nav").innerHTML = nav(i>=0?id:"");
+  $("#nav").innerHTML = nav(i>=0||id==="trouver"?id:"");
   const main = $("#main");
-  if(i<0){ main.innerHTML = homePage(); document.title="ChessBook"; window.scrollTo(0,0); }
-  else { main.innerHTML = fichePage(F[i],i); document.title = F[i].titre+" — ChessBook";
+  if(id==="trouver"){ main.innerHTML = finderPage(); document.title="Trouver le chapitre — ChessBook"; window.scrollTo(0,0); finderInit(); }
+  else if(i<0){ main.innerHTML = homePage(); document.title="ChessBook"; window.scrollTo(0,0); }
+  else { main.innerHTML = foundBanner(id) + fichePage(F[i],i); document.title = F[i].titre+" — ChessBook";
+    const bx=$(".fbanner .x"); if(bx) bx.onclick=()=>{ try{sessionStorage.removeItem(BK)}catch(e){} $(".fbanner").remove(); };
     if(parts[1]){ const el=document.getElementById(parts[1]); if(el) el.scrollIntoView(); } else window.scrollTo(0,0); }
   $("#nav").classList.remove("open");
   const q=$("#q");
@@ -161,7 +218,7 @@ function route(){
 try{ const t=localStorage.getItem("theme"); if(t) document.documentElement.dataset.theme=t; }catch(e){}
 $(".burger").onclick=()=>$("#nav").classList.toggle("open");
 addEventListener("hashchange",route);
-document.addEventListener("keydown",e=>{ if(e.target.tagName==="INPUT")return; const i=F.findIndex(f=>location.hash==="#/"+f.id);
+document.addEventListener("keydown",e=>{ if(e.target.tagName==="INPUT"||e.target.tagName==="TEXTAREA")return; const i=F.findIndex(f=>location.hash==="#/"+f.id);
   if(e.key==="ArrowRight"&&i>=0&&F[i+1]) location.hash="#/"+F[i+1].id; if(e.key==="ArrowLeft"&&i>0) location.hash="#/"+F[i-1].id; });
 route();
 })();
