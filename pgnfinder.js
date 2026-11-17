@@ -206,31 +206,50 @@ function analyse(fiches, rep, index){
   index = index || buildIndex(fiches);
   const total = rep.plies.length, res = new Map();
   /* 1. positions communes */
+  /* La clé de position (placement + trait) ne dépend pas de l'ordre des coups : une transposition
+     vers une variante du chapitre est donc reconnue d'office. On suit ici, pour chaque chapitre,
+     le score de CHAQUE section (= variante) afin de rediriger vers la bonne, et on note l'endroit
+     où la partie « rejoint » le chapitre pour signaler la transposition. */
   rep.plies.forEach(pl=>{
     const hits = index.pos.get(pl.key); if(!hits) return;
     const w = 1/(index.posN.get(pl.key)||1);
-    const perF = new Map();
-    hits.forEach(h=>{ const cur=perF.get(h.fi); if(!cur || (h.d&&!cur.d)) perF.set(h.fi,h); });
-    perF.forEach((h,fi)=>{
-      let r=res.get(fi); if(!r){ r={fi,score:0,n:0,deepest:null,diag:null}; res.set(fi,r); }
-      r.score += w*(h.d?3:1); r.n++;
-      if(!r.deepest || pl.ply>r.deepest.ply) r.deepest={ply:pl.ply,label:pl.label,k:h.k};
-      if(h.d && (!r.diag || pl.ply>r.diag.ply)) r.diag={ply:pl.ply,label:pl.label,k:h.k,p:h.p};
+    const perF = new Map();   // fi -> Map(section -> {p,d})
+    hits.forEach(h=>{
+      let m=perF.get(h.fi); if(!m){ m=new Map(); perF.set(h.fi,m); }
+      const c=m.get(h.k); if(!c || (h.d&&!c.d)) m.set(h.k,{p:h.p,d:h.d});
+    });
+    perF.forEach((ms,fi)=>{
+      let r=res.get(fi); if(!r){ r={fi,score:0,n:0,deepest:null,plies:[],secs:new Map()}; res.set(fi,r); }
+      r.score += w*([...ms.values()].some(x=>x.d)?3:1); r.n++;
+      r.deepest={ply:pl.ply,label:pl.label};
+      r.plies.push(pl.ply);
+      ms.forEach((h,k)=>{
+        let s=r.secs.get(k); if(!s){ s={k,score:0,n:0,deepest:0,label:"",diag:null}; r.secs.set(k,s); }
+        s.score += w*(h.d?3:1)/ms.size; s.n++; s.deepest=pl.ply; s.label=pl.label;
+        if(h.d) s.diag={ply:pl.ply,label:pl.label,p:h.p};
+      });
     });
   });
-  const theory=[];
+  const theory=[], plur=n=>`${n} position${n>1?"s":""} commune${n>1?"s":""}`;
   res.forEach(r=>{
     const f=fiches[r.fi];
     if(f.categorie==="Mes parties" && !(r.n>=15 && r.n>=0.6*total)) return;
-    const sec = (r.diag||r.deepest).k;
-    let why = `Votre partie suit ce chapitre jusqu'au coup ${r.deepest.label} (${r.n} position${r.n>1?"s":""} commune${r.n>1?"s":""}).`;
-    if(r.diag){
-      const pt = (f.sections[r.diag.k]||{points:[]}).points.find(p=>p.ply===r.diag.p && r.diag.p>0);
-      why = `La position de votre partie après ${r.diag.label} est identique à un diagramme du chapitre${pt&&pt.titre?" (« "+pt.titre+" »)":""} ; ${r.n} position${r.n>1?"s":""} commune${r.n>1?"s":""} en tout.`;
+    const sec=[...r.secs.values()].sort((a,b)=>b.score-a.score || b.deepest-a.deepest || a.k-b.k)[0];
+    const st=f.sections.length>1 && f.sections[sec.k] ? ` « ${f.sections[sec.k].titre} »` : "";
+    /* transposition : la dernière suite ininterrompue de positions communes (celle qui mène au point
+       le plus profond) ne commence pas au 1er coup, mais après des positions qui n'étaient pas dans
+       le chapitre : la partie y est arrivée par un autre ordre de coups */
+    const have=new Set(r.plies); let g=r.deepest.ply; while(have.has(g-1)) g--;
+    const trans = g>1 && r.deepest.ply-g+1>=3 ? rep.plies[g-1].label : null;
+    let why = trans ? `Votre partie rejoint ce chapitre par transposition (ordre de coups différent) après ${trans}, puis suit la variante${st||" du chapitre"} jusqu'au coup ${sec.label} (${plur(sec.n)}).`
+                    : `Votre partie suit la variante${st||" du chapitre"} jusqu'au coup ${sec.label} (${plur(sec.n)}).`;
+    if(sec.diag){
+      const pt = (f.sections[sec.k]||{points:[]}).points.find(p=>p.ply===sec.diag.p && sec.diag.p>0);
+      why = `${trans?`Votre partie rejoint ce chapitre par transposition (ordre de coups différent) après ${trans}. `:""}La position de votre partie après ${sec.diag.label} est identique à un diagramme de la variante${st||" du chapitre"}${pt&&pt.titre?" (« "+pt.titre+" »)":""} ; ${plur(r.n)} en tout.`;
     }
     /* un chapitre d'ouverture prime sur un chapitre de concepts qui ne partage que quelques positions */
-    const damp = !r.diag && (f.categorie==="Concepts et tactique" || f.categorie==="Silman · Style") ? 0.6 : 1;
-    theory.push({fi:r.fi,id:f.id,titre:f.titre,groupe:f.groupe,categorie:f.categorie,k:sec,score:r.score*damp,n:r.n,depth:r.deepest.ply,why});
+    const damp = !sec.diag && (f.categorie==="Concepts et tactique" || f.categorie==="Silman · Style") ? 0.6 : 1;
+    theory.push({fi:r.fi,id:f.id,titre:f.titre,groupe:f.groupe,categorie:f.categorie,k:sec.k,score:r.score*damp,n:r.n,depth:r.deepest.ply,trans,why});
   });
   theory.sort((a,b)=>b.score-a.score || b.depth-a.depth || a.fi-b.fi);
   /* 2. finale : signature de matériel dominante parmi les positions « de finale » */
