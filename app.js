@@ -230,6 +230,16 @@ function foundBanner(id){
     `<p><a href="#/trouver">Analyser une autre partie</a></p></div>`;
 }
 
+
+/* cases à cocher mémorisées (plan de lecture) */
+function initChecks(){
+  const boxes=[...document.querySelectorAll("#main input[data-ck]")]; if(!boxes.length) return;
+  const upd=()=>{ const p=document.getElementById("prog"); if(p) p.textContent=boxes.filter(c=>c.checked).length+" / "+boxes.length; };
+  boxes.forEach(c=>{ const k="ck:"+c.dataset.ck; try{ c.checked=localStorage.getItem(k)==="1"; }catch(e){}
+    c.onchange=()=>{ try{ localStorage.setItem(k,c.checked?"1":"0"); }catch(e){} upd(); }; });
+  upd();
+}
+
 function route(){
   const parts = (location.hash||"#/").replace(/^#\/?/,"").split("/");
   const id = parts[0]||"";
@@ -243,6 +253,7 @@ function route(){
   else { main.innerHTML = foundBanner(id) + fichePage(F[i],i); document.title = F[i].titre+" — ChessBook";
     const bx=$(".fbanner .x"); if(bx) bx.onclick=()=>{ try{sessionStorage.removeItem(BK)}catch(e){} $(".fbanner").remove(); };
     if(parts[1]){ const el=document.getElementById(parts[1]); if(el) el.scrollIntoView(); } else window.scrollTo(0,0); }
+  initChecks();
   $("#nav").classList.remove("open");
   const q=$("#q");
   const dgs=[...document.querySelectorAll("nav details.dg")];
