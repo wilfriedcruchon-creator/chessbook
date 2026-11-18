@@ -240,7 +240,7 @@ function analyse(fiches, rep, index){
        le plus profond) ne commence pas au 1er coup, mais après des positions qui n'étaient pas dans
        le chapitre : la partie y est arrivée par un autre ordre de coups */
     const have=new Set(r.plies); let g=r.deepest.ply; while(have.has(g-1)) g--;
-    const trans = g>1 && r.deepest.ply-g+1>=3 ? rep.plies[g-1].label : null;
+    const trans = g>1 && r.deepest.ply-g+1>=2 ? rep.plies[g-1].label : null;
     let why = trans ? `Votre partie rejoint ce chapitre par transposition (ordre de coups différent) après ${trans}, puis suit la variante${st||" du chapitre"} jusqu'au coup ${sec.label} (${plur(sec.n)}).`
                     : `Votre partie suit la variante${st||" du chapitre"} jusqu'au coup ${sec.label} (${plur(sec.n)}).`;
     if(sec.diag){

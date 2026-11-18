@@ -59,7 +59,7 @@ function byCat(){
 function nav(cur){
   const cats = byCat();
   let h = `<h1>ChessBook</h1>
-  <input id="q" type="search" placeholder="Rechercher…" aria-label="Rechercher">
+  <input id="q" type="search" placeholder="Rechercher (Entrée : dans le texte)" aria-label="Rechercher">
   <a href="#/" class="${cur===""?"on":""}"><span class="n">⌂</span>Accueil</a>
   <a href="#/trouver" class="${cur==="trouver"?"on":""}"><span class="n">♞</span>Trouver le chapitre de ma partie</a>`;
   for(const c in cats){
@@ -68,7 +68,7 @@ function nav(cur){
     for(const g in groups){
       const open = groups[g].some(f=>f.id===cur);
       h += `<details class="dg" ${open?"open":""}><summary class="grp">${esc(g)}</summary>`;
-      groups[g].forEach(f=>{ h += `<a href="#/${f.id}" data-t="${esc([f.titre,f.groupe,f.num,f.resume,...(f.idees||[])].join(" ").replace(/<[^>]*>/g," ").replace(/"/g,"'").toLowerCase())}" class="${cur===f.id?"on":""}"><span class="n">${esc(f.num||"")}</span><span>${esc(f.titre)}</span></a>`; });
+      groups[g].forEach(f=>{ h += `<a href="#/${f.id}" data-t="${esc([f.titre,f.groupe,f.num,f.resume,...(f.idees||[]),...f.sections.map(x=>x.titre)].join(" ").replace(/<[^>]*>/g," ").replace(/"/g,"'").toLowerCase())}" class="${cur===f.id?"on":""}"><span class="n">${esc(f.num||"")}</span><span>${esc(f.titre)}</span></a>`; });
       h += `</details>`;
     }
   }
@@ -130,6 +130,53 @@ function homePage(){
   return h + `</div>`;
 }
 
+
+/* ---- recherche dans tout le texte (chapitres, articles, parties commentées…) ---- */
+let TXT = null;
+const plain = h=>String(h||"").replace(/<[^>]*>/g," ").replace(/&nbsp;/g," ").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/\s+/g," ").trim();
+const fold = s=>{ let o=""; for(const c of s){ const d=c.normalize("NFD").replace(/[\u0300-\u036f]/g,""); o+=(d[0]||c).toLowerCase(); } return o; };
+function buildTxt(){
+  TXT=[];
+  F.forEach((f,fi)=>{
+    f.sections.forEach((s,k)=>{
+      const raw = plain([s.intro, s.conclusion, ...(s.points||[]).map(p=>(p.titre||"")+" "+(p.esprit||""))].join(" "));
+      TXT.push({fi,k,titre:s.titre||"",raw,norm:fold(raw),tn:fold((s.titre||"")+" "+f.titre)});
+    });
+    const extra = plain([f.resume, ...(f.idees||[]), ...(f.retenir||[]), ...(f.pieges||[])].join(" "));
+    if(extra) TXT.push({fi,k:-1,titre:"Résumé du chapitre",raw:extra,norm:fold(extra),tn:fold(f.titre)});
+  });
+}
+function textSearchPage(term, cat){
+  if(!TXT) buildTxt();
+  const toks = fold(term).split(/\s+/).filter(t=>t.length>0);
+  const cats = [...new Set(F.map(f=>f.categorie))];
+  let h = `<div class="tsearch"><header class="fh"><div class="kick">Recherche</div><h2>Dans tout le texte</h2></header>
+    <form id="tform"><input id="tq" type="search" value="${esc(term)}" placeholder="Ex. : forfait, article 12.3, pendule…" aria-label="Terme recherché">
+    <select id="tcat" aria-label="Catégorie"><option value="">Tout le site</option>${cats.map(c=>`<option ${c===cat?"selected":""}>${esc(c)}</option>`).join("")}</select>
+    <button class="btn pri" type="submit">Chercher</button></form>`;
+  if(!toks.length){ return h+`<p class="muted">Tapez un ou plusieurs mots : tous doivent figurer dans la même section.</p></div>`; }
+  const res=[];
+  TXT.forEach(e=>{
+    if(cat && F[e.fi].categorie!==cat) return;
+    let ok=true, score=0;
+    for(const t of toks){ const i=e.norm.indexOf(t); if(i<0 && e.tn.indexOf(t)<0){ ok=false; break; } score += (e.tn.indexOf(t)>=0?20:0) + (i>=0?Math.min(10,e.norm.split(t).length-1):0); }
+    if(ok) res.push({e,score});
+  });
+  res.sort((a,b)=>b.score-a.score || a.e.fi-b.e.fi || a.e.k-b.e.k);
+  const shown=res.slice(0,150);
+  h += `<p class="muted">${res.length} section${res.length>1?"s":""} trouvée${res.length>1?"s":""}${res.length>150?" (150 premières affichées)":""}.</p><div class="sr">`;
+  shown.forEach(({e})=>{
+    const f=F[e.fi];
+    const pos = toks.map(t=>e.norm.indexOf(t)).filter(i=>i>=0).sort((a,b)=>a-b);
+    const p0 = pos.length?pos[0]:0, a=Math.max(0,p0-90), b=Math.min(e.raw.length,p0+230);
+    let sn = esc(e.raw.slice(a,b));
+    toks.forEach(t=>{ const re=new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&").replace(/[aeiouc]/g,m=>({a:"[aàâä]",e:"[eéèêë]",i:"[iîï]",o:"[oôö]",u:"[uùûü]",c:"[cç]"}[m])),"gi"); sn=sn.replace(re,m=>`<mark>${m}</mark>`); });
+    const link = e.k>=0 ? `#/${f.id}/s${e.k}` : `#/${f.id}`;
+    h += `<a class="hit" href="${link}"><b>${esc(f.num?f.num+" · ":"")}${esc(f.titre)}</b><span class="sec">${esc(e.titre)}</span><span class="sn">${a>0?"… ":""}${sn}${b<e.raw.length?" …":""}</span></a>`;
+  });
+  return h+`</div></div>`;
+}
+
 /* ---- recherche par PGN : le module pgnfinder.js n'est chargé qu'à la demande ---- */
 const BK = "cb_found";
 let findIdx = null;
@@ -189,7 +236,9 @@ function route(){
   const i = F.findIndex(f=>f.id===id);
   $("#nav").innerHTML = nav(i>=0||id==="trouver"?id:"");
   const main = $("#main");
-  if(id==="trouver"){ main.innerHTML = finderPage(); document.title="Trouver le chapitre — ChessBook"; window.scrollTo(0,0); finderInit(); }
+  if(id==="texte"){ const term=decodeURIComponent(parts[1]||""), cat=decodeURIComponent(parts[2]||""); main.innerHTML=textSearchPage(term,cat); document.title="Recherche — ChessBook"; window.scrollTo(0,0);
+    const fm=$("#tform"); fm.onsubmit=ev=>{ ev.preventDefault(); location.hash="#/texte/"+encodeURIComponent($("#tq").value.trim())+"/"+encodeURIComponent($("#tcat").value); }; if(!term) $("#tq").focus(); }
+  else if(id==="trouver"){ main.innerHTML = finderPage(); document.title="Trouver le chapitre — ChessBook"; window.scrollTo(0,0); finderInit(); }
   else if(i<0){ main.innerHTML = homePage(); document.title="ChessBook"; window.scrollTo(0,0); }
   else { main.innerHTML = foundBanner(id) + fichePage(F[i],i); document.title = F[i].titre+" — ChessBook";
     const bx=$(".fbanner .x"); if(bx) bx.onclick=()=>{ try{sessionStorage.removeItem(BK)}catch(e){} $(".fbanner").remove(); };
@@ -199,6 +248,7 @@ function route(){
   const dgs=[...document.querySelectorAll("nav details.dg")];
   dgs.forEach(d=>d.dataset.o=d.open?"1":"");
   const strip=s=>s.normalize("NFD").replace(/[̀-ͯ]/g,"");
+  q.onkeydown=ev=>{ if(ev.key==="Enter" && q.value.trim()){ ev.preventDefault(); location.hash="#/texte/"+encodeURIComponent(q.value.trim()); } };
   q.oninput=()=>{
     const v=strip(q.value.toLowerCase().trim());
     dgs.forEach(d=>{
@@ -218,7 +268,7 @@ function route(){
 try{ const t=localStorage.getItem("theme"); if(t) document.documentElement.dataset.theme=t; }catch(e){}
 $(".burger").onclick=()=>$("#nav").classList.toggle("open");
 addEventListener("hashchange",route);
-document.addEventListener("keydown",e=>{ if(e.target.tagName==="INPUT"||e.target.tagName==="TEXTAREA")return; const i=F.findIndex(f=>location.hash==="#/"+f.id);
+document.addEventListener("keydown",e=>{ if(["INPUT","TEXTAREA","SELECT"].includes(e.target.tagName))return; const i=F.findIndex(f=>location.hash==="#/"+f.id);
   if(e.key==="ArrowRight"&&i>=0&&F[i+1]) location.hash="#/"+F[i+1].id; if(e.key==="ArrowLeft"&&i>0) location.hash="#/"+F[i-1].id; });
 route();
 })();
